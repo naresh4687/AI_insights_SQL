@@ -1,0 +1,25 @@
+# Secrets
+.env
+.streamlit/secrets.toml
+
+# Virtual environments
+.venv/
+venv/
+
+# Python artefacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Generated databases (recreate with: python scripts/seed_database.py)
+data/*.db
+*.db-journal
+
+# Test artefacts
+test-results/
+playwright-report/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store

@@ -1,0 +1,6 @@
+# Development and test dependencies. Install with:
+#   pip install -r requirements-dev.txt
+#   playwright install chromium   (optional if Google Chrome is installed)
+-r requirements.txt
+pytest==9.1.1
+playwright==1.63.0

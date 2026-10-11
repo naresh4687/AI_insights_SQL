@@ -1,0 +1,41 @@
+# InsightSQL dark theme. Colours here are mirrored in src/ui/theme.py (charts and the few
+# custom elements); change both together.
+
+[theme]
+base = "dark"
+primaryColor = "#8B5CF6"              # electric violet: primary actions, selection
+backgroundColor = "#0B1020"           # midnight navy
+secondaryBackgroundColor = "#141B2E"  # cards, inputs
+textColor = "#E6E8F2"                 # near-white
+borderColor = "#252E4A"
+linkColor = "#22D3EE"                 # cyan
+linkUnderline = false
+codeBackgroundColor = "#0F1528"
+codeTextColor = "#A5F3FC"
+# Inter from Google Fonts when online; the system sans-serif when offline.
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap, sans-serif"
+baseRadius = "0.75rem"
+buttonRadius = "0.6rem"
+showWidgetBorder = true
+metricValueFontSize = "1.75rem"   # full values fit in four cards on a laptop screen
+metricValueFontWeight = 650
+dataframeBorderColor = "#252E4A"
+dataframeHeaderBackgroundColor = "#11182B"
+dataframeHeaderTextColor = "#9AA3BC"
+# Status colours: distinct hues with text colours that keep 4.5:1 contrast on the dark
+# background (status is never shown by colour alone; icons and words are always used).
+greenColor = "#34D399"
+yellowColor = "#FBBF24"
+orangeColor = "#FB923C"
+redColor = "#F87171"
+blueColor = "#22D3EE"
+violetColor = "#8B5CF6"
+chartCategoricalColors = ["#8B5CF6", "#22D3EE", "#F472B6", "#34D399", "#FBBF24", "#60A5FA"]
+
+[theme.sidebar]
+backgroundColor = "#080C18"
+secondaryBackgroundColor = "#11172A"
+borderColor = "#1C2440"
+
+[client]
+toolbarMode = "minimal"   # hide developer-only menu items such as "Deploy"
