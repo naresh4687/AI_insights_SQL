@@ -37,5 +37,8 @@ backgroundColor = "#080C18"
 secondaryBackgroundColor = "#11172A"
 borderColor = "#1C2440"
 
+[server]
+maxUploadSize = 25   # MB; keep equal to INSIGHTSQL_IMPORT_MAX_MB (default 25)
+
 [client]
 toolbarMode = "minimal"   # hide developer-only menu items such as "Deploy"

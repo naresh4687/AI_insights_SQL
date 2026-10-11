@@ -14,6 +14,7 @@ Screenshots are written to test-results/e2e/ (git-ignored).
 
 import os
 import re
+import sqlite3
 import subprocess
 import sys
 import time
@@ -44,6 +45,9 @@ TIMEOUT_MS = 15_000
 
 # --- Fixtures: live server, fake Gemini API, browser ---------------------------------
 
+E2E_SECRET_KEY = "ZmFrZS1lMmUta2V5LWZvci10ZXN0cy1vbmx5LTEyMzQ="  # Fernet format; tests only
+
+
 class LiveApp:
     def __init__(self, url: str, db_path: Path, process: subprocess.Popen):
         self.url, self.db_path, self.process = url, db_path, process
@@ -57,6 +61,12 @@ def _start_app(tmp_dir: Path, gemini_url: str) -> LiveApp:
     env = {k: v for k, v in os.environ.items() if not k.startswith(("GEMINI_", "GOOGLE_API", "HF_", "AI_PROVIDER"))}
     env.update(
         INSIGHTSQL_DB_PATH=str(db_path),
+        # Imports and the catalog go to the test folder, never data/.
+        INSIGHTSQL_APP_DB_PATH=str(tmp_dir / "app.db"),
+        INSIGHTSQL_DATASETS_DB_PATH=str(tmp_dir / "datasets.db"),
+        INSIGHTSQL_UPLOADS_DIR=str(tmp_dir / "uploads"),
+        INSIGHTSQL_SECRET_KEY=E2E_SECRET_KEY,  # test-only key for saved connection secrets
+        INSIGHTSQL_ALLOWED_PRIVATE_HOSTS="127.0.0.1",  # the fake API used by the connection test
         AI_PROVIDER="gemini",
         GEMINI_BASE_URL=gemini_url,
         GEMINI_API_KEY=GEMINI_TEST_KEY,  # explicit, so the app never loads a real key from .env
@@ -149,7 +159,8 @@ def _open(browser, url: str, width: int = 1280, height: int = 900):
     page.on("console", lambda msg: msg.type == "error" and page.console_errors.append(msg.text))
     page.on("pageerror", lambda exc: page.console_errors.append(str(exc)))
     page.goto(url)
-    expect(page.get_by_text(DASHBOARD_HEADING)).to_be_visible()
+    # The first draw of a new session can take longer than 5 s while the server finishes earlier work.
+    expect(page.get_by_text(DASHBOARD_HEADING)).to_be_visible(timeout=TIMEOUT_MS)
     return page
 
 
@@ -170,13 +181,30 @@ PAGE_HEADINGS = {
     "Query History": "Every question, with its outcome",
     "SQL Explorer": "Inspect and run read-only SQL",
     "Settings & About": "Configuration and status",
+    "Import Data": "Upload a CSV or Excel file, check its quality",
+    "Connections": "Connect to a PostgreSQL or MySQL database",
+    "Datasets": "Every dataset you can ask about",
+    "Dashboard Studio": "Your own dashboards, built from AI Analyst answers",
 }
 
 
+def _link_name(name: str) -> re.Pattern:
+    """A sidebar link's accessible name ends with the page name (after its icon), and must not just
+    start with it: "Dashboard" must not also match "Dashboard Studio"."""
+    return re.compile(rf"(^|\s){re.escape(name)}$")
+
+
 def go(page, name: str) -> None:
-    """Navigate with the sidebar link, like a user."""
-    page.get_by_role("link", name=name).click()
+    """Navigate with the sidebar link, like a user, and wait until the page has finished drawing.
+
+    On the AI Analyst page this includes the chat input: leaving before it has mounted makes
+    Streamlit's audio-recording component log "Container not found" (an intermittent
+    console error seen even with the pre-project code).
+    """
+    page.get_by_role("link", name=_link_name(name)).click()
     expect(page.get_by_text(PAGE_HEADINGS[name])).to_be_visible()
+    if name == "AI Analyst":
+        expect(page.locator("[data-testid=stChatInput]")).to_be_visible()
 
 
 def ask(page, question: str) -> None:
@@ -285,7 +313,7 @@ def test_initial_page(page):
 def test_sidebar_navigation_reaches_every_page_and_marks_it_active(page):
     for name in ("AI Analyst", "Query History", "SQL Explorer", "Settings & About", "Dashboard"):
         go(page, name)
-        expect(page.get_by_role("link", name=name)).to_have_attribute("aria-current", "page")
+        expect(page.get_by_role("link", name=_link_name(name))).to_have_attribute("aria-current", "page")
 
 
 def test_dashboard_call_to_action_opens_the_analyst(page):
@@ -520,3 +548,250 @@ def test_narrow_screen_has_no_horizontal_scroll(browser, live_app, fake, width, 
         assert page.console_errors == []
     finally:
         page.context.close()
+
+
+# --- Import Data -------------------------------------------------------------------------
+
+IMPORT_CSV = b"Order ID,Amount,Region\n1,10.5,East\n2,20,West\n2,20,West\n3,7.25,East\n"
+
+
+def upload_file(page, name: str, content: bytes) -> None:
+    page.locator("input[type=file]").set_input_files(files=[{"name": name, "mimeType": "text/csv",
+                                                              "buffer": content}])
+    expect(page.get_by_text("2. Original data")).to_be_visible()
+
+
+def test_import_csv_end_to_end(page, live_app):
+    go(page, "Import Data")
+    expect(page.get_by_text("No imported datasets yet")).to_be_visible()
+    upload_file(page, "e2e_orders.csv", IMPORT_CSV)
+    expect(page.locator(".st-key-card_import_checks")).to_contain_text("exact copies")
+    expect(page.locator(".st-key-card_import_checks [data-testid=stAlertContentWarning]").first).to_be_visible()
+
+    page.locator(".st-key-import_duplicates").get_by_text("Remove duplicate rows").click()
+    save = page.get_by_role("button", name="Save dataset")
+    expect(page.locator(".st-key-card_import_changes")).to_contain_text("Removes or replaces data")
+    expect(save).to_be_disabled()
+    page.locator(".st-key-import_confirm").get_by_text("I confirm").click()
+    expect(save).to_be_enabled()
+    save.click()
+
+    expect(page.get_by_text("Saved e2e orders as dataset")).to_be_visible()
+    listed = table_rows(page.locator(".st-key-card_import_datasets"))  # the grid is a canvas; read its table
+    assert any("e2e_orders" in row for row in listed), listed
+    datasets_db = live_app.db_path.parent / "datasets.db"
+    conn = sqlite3.connect(datasets_db)
+    try:
+        assert conn.execute("SELECT order_id, amount, region FROM e2e_orders ORDER BY order_id").fetchall() == [
+            (1, 10.5, "East"), (2, 20.0, "West"), (3, 7.25, "East")]
+    finally:
+        conn.close()
+    assert (live_app.db_path.parent / "uploads" / "e2e_orders" / "original.csv").read_bytes() == IMPORT_CSV
+    assert sales_count(live_app.db_path) == 600  # demo data untouched
+    screenshot(page, "import-saved")
+
+
+def test_import_page_fits_a_phone_screen(browser, live_app, fake):
+    # Reached through the sidebar, then narrowed: opening /import directly makes Streamlit probe
+    # /import/_stcore/... first, which logs harmless 404s for every page (not just this one).
+    page = _open(browser, live_app.url)
+    try:
+        go(page, "Import Data")
+        page.set_viewport_size({"width": 375, "height": 812})
+        upload_file(page, "phone.csv", b"a,b\n1,2\n")
+        expect(page.get_by_text("7. Save as a dataset")).to_be_visible()
+        assert not has_horizontal_overflow(page)
+        screenshot(page, "import-375")
+        assert page.console_errors == []
+    finally:
+        page.context.close()
+
+
+# --- Dataset selection -------------------------------------------------------------------
+
+def _register_dataset(live_app, name: str, content: bytes):
+    """Import through the real pipeline into the live server's own (temporary) storage."""
+    from src.catalog import DatasetCatalog
+    from src.ingest import store
+    from src.ingest.preprocess import CleanOptions, clean
+    from src.ingest.profiling import profile
+    from src.ingest.readers import Limits, ReadOptions, read_file
+    from src.ingest.validation import validate
+
+    folder = live_app.db_path.parent
+    catalog = DatasetCatalog(folder / "app.db")
+    catalog.ensure_builtin()
+    if any(d.name == name for d in catalog.list()):
+        return
+    raw = read_file(f"{name}.csv", content, ReadOptions(), Limits(1_000_000, 1_000, 20))
+    store.save_import(name=name, description="", raw=raw, content=content, read_options=ReadOptions(),
+                      clean_options=CleanOptions(), result=clean(raw, CleanOptions()),
+                      checks=validate(raw, profile(raw)), confirmed_destructive=True, catalog=catalog,
+                      datasets_db=folder / "datasets.db", uploads_dir=folder / "uploads")
+
+
+def test_selected_dataset_is_used_and_isolated_in_the_browser(page, live_app, fake):
+    _register_dataset(live_app, "E2E Staff", b"Name,Salary\nAsha,90000\nRavi,85000\n")
+    page.reload()
+    expect(page.get_by_text(DASHBOARD_HEADING)).to_be_visible()
+    go(page, "SQL Explorer")
+    _pick(page, "dataset", "E2E Staff", confirm=page.get_by_text("Only a single SELECT on the e2e_staff table"))
+    run_sql(page, "SELECT name, salary FROM e2e_staff ORDER BY salary DESC")
+    result = page.locator(".st-key-card_answer_explorer")
+    expect(result.get_by_text("Dataset: E2E Staff")).to_be_visible()
+    assert table_rows(result) == [["Asha", "90000"], ["Ravi", "85000"]]
+
+    run_sql(page, "SELECT * FROM sales")
+    expect(error_box(page.locator(".st-key-card_error_explorer"))).to_contain_text("not available")
+    assert sales_count(live_app.db_path) == 600
+    screenshot(page, "explorer-imported-dataset")
+
+
+# --- AI Analyst enhancements -------------------------------------------------------------
+
+def test_chart_type_switch_and_csv_download(page, live_app):
+    go(page, "AI Analyst")
+    page.locator(".st-key-example_1 button").click()  # revenue by region
+    result = answer(page, 0)
+
+    open_tab(result, "Visualization")
+    assert chart_marks(result) == "bar"
+    result.locator(".st-key-charttype_turn_0").get_by_role("radio", name="Pie").click()
+    expect(result.locator("[data-testid=stVegaLiteChart] g.mark-arc")).to_be_attached()
+    screenshot(page, "analyst-pie")
+
+    open_tab(result, "Insights")
+    expect(result).to_contain_text("East accounts for 27.8% of the total revenue in this result")
+    open_tab(result, "SQL")
+    expect(result).to_contain_text("What this query does")
+
+    open_tab(result, "Results")
+    with page.expect_download() as download_info:
+        result.get_by_role("button", name="Download CSV").click()
+    download = download_info.value
+    assert re.fullmatch(r"insightsql_demo-sales_\d{8}-\d{6}\.csv", download.suggested_filename)
+    content = Path(download.path()).read_bytes()
+    assert content.startswith(b"\xef\xbb\xbf")
+    lines = content.decode("utf-8-sig").splitlines()
+    assert lines[0] == "region,revenue" and len(lines) == 5 and lines[1].startswith("East,")
+
+    expect(page.locator("[class*=st-key-followup_]").get_by_role("button").first).to_be_visible()
+
+
+# --- Connections ------------------------------------------------------------------------
+
+def _pick(page, key: str, option: str, confirm=None) -> None:
+    """Choose in a selectbox. A rerun still in progress can close the menu or undo the choice, so
+    retry until the option is clicked and, if given, ``confirm`` (an effect of the choice) is visible."""
+    choice = page.get_by_role("option", name=option, exact=True)
+    for _ in range(5):
+        page.locator(f".st-key-{key}").click()
+        try:
+            choice.click(timeout=2000)
+        except Exception:  # menu closed by a rerun; open it again
+            page.keyboard.press("Escape")
+            continue
+        if confirm is None:
+            return
+        try:
+            expect(confirm).to_be_visible(timeout=3000)
+            return
+        except AssertionError:  # the choice was undone by a late rerun; choose again
+            continue
+    if confirm is not None:
+        expect(confirm).to_be_visible()
+
+
+def _box(page, label: str):
+    """A text box by its exact label (get_by_label would also match the field's help icon)."""
+    return page.get_by_role("textbox", name=label, exact=True)
+
+
+def test_api_connection_import_in_the_browser(page, live_app):
+    from tests.servers import API_TOKEN, running_fake_api
+    with running_fake_api() as api:
+        go(page, "Connections")
+        expect(page.get_by_text("No connections yet")).to_be_visible()
+        _pick(page, "conn_kind___new__", "REST API")
+        expect(_box(page, "Base address")).to_be_visible()  # the REST fields replaced the database ones
+        _box(page, "Name").fill("E2E API")
+        _box(page, "Base address").fill(api.base_url)
+        _box(page, "Base address").press("Tab")
+        _pick(page, "conn_auth___new__", "Bearer token")
+        _box(page, "Token, API key or password").fill(API_TOKEN)
+        page.get_by_role("button", name="Save connection").click()
+        expect(page.get_by_text("Saved connection 'E2E API'")).to_be_visible()
+
+        _box(page, "Endpoint path").fill("/orders")
+        _box(page, "Where the records are in the response").fill("data")
+        _box(page, "Where the records are in the response").press("Tab")
+        page.get_by_role("button", name="Fetch for import").click()
+        expect(page.get_by_text("Snapshot of /orders")).to_be_visible()
+        page.get_by_role("button", name="Save dataset").click()
+        expect(page.get_by_text("Saved orders as dataset")).to_be_visible()
+        assert API_TOKEN not in page.content()
+        assert api.requests and all(r["headers"].get("Authorization") == f"Bearer {API_TOKEN}" for r in api.requests)
+        screenshot(page, "connections-imported")
+
+
+# --- Datasets and refresh ----------------------------------------------------------------
+
+def test_refresh_now_in_the_browser(page, live_app, monkeypatch):
+    from src.catalog import DatasetCatalog
+    from src.connectors import rest, snapshot
+    from src.connectors.profiles import ConnectionStore
+    from src.ingest import store
+    from src.ingest.preprocess import CleanOptions, clean
+    from src.ingest.profiling import profile
+    from src.ingest.readers import ReadOptions
+    from src.ingest.validation import validate
+    from tests.servers import API_TOKEN, running_fake_api
+
+    folder = live_app.db_path.parent
+    monkeypatch.setenv("INSIGHTSQL_SECRET_KEY", E2E_SECRET_KEY)  # the live server's key
+    monkeypatch.setenv("INSIGHTSQL_APP_DB_PATH", str(folder / "app.db"))
+    with running_fake_api() as api:
+        monkeypatch.setenv("INSIGHTSQL_ALLOWED_PRIVATE_HOSTS", f"127.0.0.1:{api.port}")
+        connection = ConnectionStore(folder / "app.db").save("Refresh API", "rest",
+                                                             {"base_url": api.base_url, "auth": "bearer"}, API_TOKEN)
+        snap = snapshot.from_api(connection, API_TOKEN, rest.Endpoint("/orders", records_path="data"), 1000, 50)
+        catalog = DatasetCatalog(folder / "app.db")
+        store.save_import(name="Refresh orders", description="", raw=snap.raw, content=snap.content,
+                          read_options=ReadOptions(), clean_options=CleanOptions(),
+                          result=clean(snap.raw, CleanOptions()), checks=validate(snap.raw, profile(snap.raw)),
+                          confirmed_destructive=True, catalog=catalog, datasets_db=folder / "datasets.db",
+                          uploads_dir=folder / "uploads", source=snap.source)
+        api.orders[:] = api.orders[:3]  # the source now has 3 rows
+
+        page.reload()
+        go(page, "Datasets")
+        _pick(page, "ds_selected", "Refresh orders", confirm=page.get_by_text("API endpoint /orders"))
+        page.get_by_role("button", name="Refresh now").click()
+        expect(page.get_by_text("Replaced with 3 rows.").first).to_be_visible()
+        conn = sqlite3.connect(folder / "datasets.db")
+        try:
+            assert conn.execute("SELECT COUNT(*) FROM refresh_orders").fetchone()[0] == 3
+        finally:
+            conn.close()
+        screenshot(page, "datasets-refreshed")
+
+
+# --- Dashboard Studio --------------------------------------------------------------------
+
+def test_answer_to_dashboard_in_the_browser(page, live_app):
+    go(page, "AI Analyst")
+    page.locator(".st-key-example_1 button").click()
+    answer(page, 0)
+    page.get_by_role("button", name="Add to dashboard").first.click()
+    _box(page, "New dashboard name").fill("E2E board")
+    _box(page, "New dashboard name").press("Tab")
+    page.get_by_role("button", name="Add", exact=True).click()
+    expect(page.get_by_text("Added to 'E2E board'")).to_be_visible()
+
+    page.keyboard.press("Escape")
+    go(page, "Dashboard Studio")
+    card = page.locator("[class*=st-key-card_dw_]").first
+    expect(card).to_contain_text("What is the total revenue by region?")
+    expect(card.locator("[data-testid=stVegaLiteChart] svg.marks")).to_be_visible()
+    assert not has_horizontal_overflow(page)
+    screenshot(page, "studio")

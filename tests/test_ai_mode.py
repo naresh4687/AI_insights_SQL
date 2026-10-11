@@ -33,7 +33,7 @@ def table_counts(db_path) -> dict:
     return {**counts, "tables": tables}
 
 
-ORIGINAL = {"products": 12, "sales": 600, "tables": {"products", "sales", "query_history"}}
+ORIGINAL = {"products": 12, "sales": 600, "tables": {"products", "sales", "query_history", "history_datasets", "history_users"}}
 
 
 # --- Valid AI SQL goes through the shared pipeline ---------------------------------
@@ -117,7 +117,7 @@ def test_prompt_injection_in_question_cannot_cause_writes(seeded_db, fake_hf):
 # --- Defence in depth: no single disabled layer opens a path -----------------------
 
 def _disable_parser(monkeypatch):
-    monkeypatch.setattr(query_service, "validate_sql", lambda sql: sql)
+    monkeypatch.setattr(query_service, "validate_sql", lambda sql, *scope: sql)
 
 
 def _disable_authorizer(monkeypatch):

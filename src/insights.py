@@ -52,8 +52,12 @@ def _label_and_value_columns(data: pd.DataFrame) -> tuple[str, str] | None:
     return label, value
 
 
-def _is_period_column(series: pd.Series) -> bool:
+def is_period_column(series: pd.Series) -> bool:
+    """True when every value looks like a period: YYYY-MM or YYYY-MM-DD."""
     return series.map(lambda v: bool(_PERIOD_PATTERN.match(str(v)))).all()
+
+
+_is_period_column = is_period_column  # earlier name, still used in this module
 
 
 def choose_chart(data: pd.DataFrame) -> ChartSpec | None:

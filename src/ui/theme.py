@@ -81,6 +81,10 @@ CSS = """
   background: rgba(20,27,46,.6); font-size: .82rem; color: var(--isql-muted); line-height: 1.5; }
 .isql-status b { color: var(--isql-text); font-weight: 600; }
 .isql-version { color: var(--isql-muted); font-size: .75rem; margin-top: .5rem; }
+.isql-account { font-size: .82rem; color: var(--isql-muted); line-height: 1.6; margin-bottom: .4rem;
+  overflow-wrap: anywhere; }
+.isql-account b { color: var(--isql-text); font-weight: 600; }
+.isql-account-email { display: block; }
 
 @keyframes isql-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 

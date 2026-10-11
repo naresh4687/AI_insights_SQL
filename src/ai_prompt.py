@@ -7,11 +7,13 @@ read-only SQL, but it is not a security boundary: every candidate still goes thr
 
 import json
 import re
+from typing import TYPE_CHECKING
 
 import sqlglot
 from sqlglot import exp
 
 from src import database
+from src.core.models import DEMO_DATASET_ID
 from src.query_service import SqlGenerationError
 from src.sql_guard import ALLOWED_FUNCTIONS, ALLOWED_TABLES
 
@@ -21,6 +23,9 @@ RESPONSE_SCHEMA = {
     "properties": {"sql": {"type": "string"}},
     "required": ["sql"],
 }
+
+if TYPE_CHECKING:
+    from src.core.models import Dataset
 
 _THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
 _FENCED_BLOCK = re.compile(r"```[ \t]*(?:sql|sqlite|json)?[ \t]*\n?(.*?)```", re.DOTALL | re.IGNORECASE)
@@ -37,8 +42,12 @@ def schema_description() -> str:
     return "\n\n".join(statements)
 
 
-def build_system_prompt() -> str:
-    functions = ", ".join(sorted(ALLOWED_FUNCTIONS - {"cast"}))
+def build_system_prompt(dataset: "Dataset | None" = None) -> str:
+    """The system prompt for the demo data (``dataset`` None or the demo dataset) or for one
+    imported dataset. Only table and column names and types are included: never data values,
+    and never the dataset's name or description (free text that could carry instructions)."""
+    if dataset is not None and dataset.dataset_id != DEMO_DATASET_ID:
+        return _dataset_prompt(dataset)
     return f"""You translate business questions into one SQLite query for a sales database.
 
 Database schema (the only tables and columns that exist):
@@ -51,10 +60,54 @@ Facts about the data:
 - Join with: sales.product_id = products.product_id
 - sale_date is TEXT in 'YYYY-MM-DD' format; use strftime('%Y-%m', sale_date) for months.
 
-Rules:
+{_rules("the products and sales tables")}"""
+
+
+def dataset_schema(dataset: "Dataset") -> str:
+    """CREATE TABLE statements for an imported dataset, from the catalog (names are safe
+    identifiers, checked when the dataset was registered)."""
+    statements = []
+    for table in dataset.tables:
+        columns = ",\n".join(f"  {c.name} {c.data_type}" + ("" if c.nullable else " NOT NULL")
+                             for c in table.columns)
+        statements.append(f"CREATE TABLE {table.name} (\n{columns}\n);")
+    return "\n\n".join(statements)
+
+
+def _dataset_prompt(dataset: "Dataset") -> str:
+    kinds = dataset.extra.get("column_types", {})
+    facts = []
+    dates = [n for n, k in kinds.items() if k == "date"]
+    datetimes = [n for n, k in kinds.items() if k == "datetime"]
+    booleans = [n for n, k in kinds.items() if k == "boolean"]
+    if dates:
+        facts.append(f"- {', '.join(dates)}: TEXT dates in 'YYYY-MM-DD' format; use strftime('%Y-%m', column) "
+                     "for months.")
+    if datetimes:
+        facts.append(f"- {', '.join(datetimes)}: TEXT in 'YYYY-MM-DD HH:MM:SS' format.")
+    if booleans:
+        facts.append(f"- {', '.join(booleans)}: yes/no values stored as 1 (yes) and 0 (no).")
+    facts.append("- Columns may contain empty values (NULL).")
+    names = [t.name for t in dataset.tables]
+    tables = f"the {names[0]} table" if len(names) == 1 else f"the {', '.join(names)} tables"
+    return f"""You translate business questions into one SQLite query for the dataset described below.
+
+Database schema (the only tables and columns that exist):
+
+{dataset_schema(dataset)}
+
+Facts about the data:
+{chr(10).join(facts)}
+
+{_rules(tables)}"""
+
+
+def _rules(tables: str) -> str:
+    functions = ", ".join(sorted(ALLOWED_FUNCTIONS - {"cast"}))
+    return f"""Rules:
 1. Reply only with JSON of the form {{"sql": "<query>"}}. No explanations, comments, or Markdown.
 2. Write exactly one read-only SELECT statement (WITH ... SELECT is allowed).
-3. Use only the products and sales tables and the columns above. Never use system tables.
+3. Use only {tables} and the columns above. Never use system tables.
 4. Never write INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, REPLACE, PRAGMA, ATTACH,
    or anything else that changes data or schema.
 5. Use only these functions: {functions}.

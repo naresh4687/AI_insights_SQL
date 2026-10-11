@@ -44,11 +44,11 @@ def model_name() -> str:
     return config.get_hf_model()
 
 
-def build_request(question: str, model: str) -> dict:
+def build_request(question: str, model: str, dataset=None) -> dict:
     return {
         "model": model,
         "messages": [
-            {"role": "system", "content": build_system_prompt()},
+            {"role": "system", "content": build_system_prompt(dataset)},
             {"role": "user", "content": question},
         ],
         "stream": False,
@@ -62,14 +62,15 @@ def extract_sql(content: str) -> str:
     return ai_prompt.extract_sql(content, HuggingFaceError)
 
 
-def generate_sql(question: str) -> str:
-    """Ask the configured model for SQL answering ``question``. Never executes it."""
+def generate_sql(question: str, dataset=None) -> str:
+    """Ask the configured model for SQL answering ``question`` about ``dataset`` (None = the
+    demo data). Never executes it."""
     if not isinstance(question, str) or not question.strip():
         raise HuggingFaceError("Please enter a question.")
 
     base_url, model, token = _settings()
     body = _request_json(
-        f"{base_url}/chat/completions", build_request(question.strip(), model), token,
+        f"{base_url}/chat/completions", build_request(question.strip(), model, dataset), token,
         config.get_hf_timeout(), model,
     )
     content = _reply_content(body)

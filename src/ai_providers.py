@@ -29,9 +29,11 @@ def display_name() -> str:
         return PROVIDERS[config.DEFAULT_AI_PROVIDER].DISPLAY_NAME
 
 
-def generate_sql(question: str) -> str:
-    """Ask the configured provider for SQL (resolved on every call)."""
-    return current().generate_sql(question)
+def generate_sql(question: str, dataset=None) -> str:
+    """Ask the configured provider (resolved on every call) for SQL about ``dataset``
+    (None = the demo data)."""
+    provider = current()
+    return provider.generate_sql(question) if dataset is None else provider.generate_sql(question, dataset)
 
 
 def check_status() -> tuple[bool, str]:

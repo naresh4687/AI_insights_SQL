@@ -1,6 +1,7 @@
 """Shared pytest fixtures."""
 
 import json
+import logging
 import socket
 import threading
 import time
@@ -10,12 +11,17 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 
 from src import database
+from src.core import logging_setup
 
 
 # Real credentials or settings from the developer's .env must never reach a test.
 _REAL_AI_SETTINGS = (
     "AI_PROVIDER", "GEMINI_API_KEY", "GOOGLE_API_KEY", "GEMINI_MODEL", "GEMINI_BASE_URL",
     "GEMINI_TIMEOUT_SECONDS", "HF_TOKEN", "HF_MODEL", "HF_BASE_URL", "HF_TIMEOUT_SECONDS",
+    # Connection secrets and network permissions are also set explicitly by each test.
+    "INSIGHTSQL_SECRET_KEY", "INSIGHTSQL_ALLOWED_PRIVATE_HOSTS", "INSIGHTSQL_CONNECTOR_TIMEOUT_SECONDS",
+    # Sign-in is off unless a test turns it on.
+    "INSIGHTSQL_AUTH", "INSIGHTSQL_ADMIN_EMAILS", "INSIGHTSQL_ALLOWED_SIGNINS", "INSIGHTSQL_DEFAULT_ROLE",
 )
 
 
@@ -23,6 +29,26 @@ _REAL_AI_SETTINGS = (
 def _no_real_ai_credentials(monkeypatch):
     for name in _REAL_AI_SETTINGS:
         monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_storage(tmp_path, monkeypatch):
+    """Every test gets its own app and dataset stores, never the real files in data/."""
+    monkeypatch.setenv("INSIGHTSQL_APP_DB_PATH", str(tmp_path / "app.db"))
+    monkeypatch.setenv("INSIGHTSQL_DATASETS_DB_PATH", str(tmp_path / "datasets.db"))
+    monkeypatch.setenv("INSIGHTSQL_UPLOADS_DIR", str(tmp_path / "uploads"))
+
+
+@pytest.fixture(autouse=True)
+def _restore_logging():
+    """Undo configure_logging() (run by app tests) after each test, so redaction and the
+    ``src`` log level never hide what another test checks, such as a key being logged."""
+    src_logger = logging.getLogger("src")
+    level, handlers = src_logger.level, list(src_logger.handlers)
+    yield
+    logging_setup.uninstall_redaction()
+    src_logger.setLevel(level)
+    src_logger.handlers[:] = handlers
 
 
 @pytest.fixture

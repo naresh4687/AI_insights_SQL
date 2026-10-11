@@ -45,9 +45,10 @@ def model_name() -> str:
     return config.get_gemini_model()
 
 
-def build_config() -> types.GenerateContentConfig:
+def build_config(dataset=None) -> types.GenerateContentConfig:
+    """Request settings; the system prompt describes ``dataset`` (None = the demo data)."""
     return types.GenerateContentConfig(
-        system_instruction=ai_prompt.build_system_prompt(),
+        system_instruction=ai_prompt.build_system_prompt(dataset),
         temperature=0,
         max_output_tokens=MAX_OUTPUT_TOKENS,
         response_mime_type="application/json",
@@ -60,8 +61,9 @@ def extract_sql(content: str) -> str:
     return ai_prompt.extract_sql(content, GeminiError)
 
 
-def generate_sql(question: str) -> str:
-    """Ask the configured Gemini model for SQL answering ``question``. Never executes it."""
+def generate_sql(question: str, dataset=None) -> str:
+    """Ask the configured Gemini model for SQL answering ``question`` about ``dataset``
+    (None = the demo data). Never executes it."""
     if not isinstance(question, str) or not question.strip():
         raise GeminiError("Please enter a question.")
 
@@ -69,7 +71,8 @@ def generate_sql(question: str) -> str:
     timeout = config.get_gemini_timeout()
     with _client(api_key, base_url, timeout) as client:
         response = _call(
-            lambda: client.models.generate_content(model=model, contents=question.strip(), config=build_config()),
+            lambda: client.models.generate_content(model=model, contents=question.strip(),
+                                                   config=build_config(dataset)),
             api_key, model, timeout,
         )
 

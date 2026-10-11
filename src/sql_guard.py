@@ -11,7 +11,12 @@ Defence in depth — a query must pass every layer:
    explicitly allowed. This catches anything the parser layer might misjudge.
 3. The connection is opened read-only (``mode=ro``) with ``PRAGMA query_only = ON``
    (see ``query_service``), with a timeout and a row cap.
+
+Both checking layers take an ``allowed_tables`` scope: the tables one request may read.
+It defaults to ``ALLOWED_TABLES`` (the demo data), so existing callers are unchanged.
 """
+
+from collections.abc import Iterable
 
 import sqlite3
 
@@ -53,11 +58,21 @@ class UnsafeSQLError(ValueError):
     """Raised when SQL fails validation. The message is safe to show to users."""
 
 
-def validate_sql(sql: str) -> str:
+def table_scope(tables: Iterable[str]) -> frozenset[str]:
+    """Normalise an allowlist of table names. An empty scope is refused, never widened."""
+    scope = frozenset(t.lower() for t in tables if isinstance(t, str) and t.strip())
+    if not scope:
+        raise ValueError("At least one table must be allowed.")
+    return scope
+
+
+def validate_sql(sql: str, allowed_tables: Iterable[str] = ALLOWED_TABLES) -> str:
     """Validate ``sql`` and return the normalised, safe SQL to execute.
 
-    Raises ``UnsafeSQLError`` with a user-facing reason if the query is not allowed.
+    Only tables in ``allowed_tables`` may be read. Raises ``UnsafeSQLError`` with a
+    user-facing reason if the query is not allowed.
     """
+    scope = table_scope(allowed_tables)
     if not isinstance(sql, str) or not sql.strip():
         raise UnsafeSQLError("No SQL query was provided.")
     if len(sql) > MAX_SQL_LENGTH:
@@ -81,12 +96,12 @@ def validate_sql(sql: str) -> str:
         if with_clause.args.get("recursive"):
             raise UnsafeSQLError("Recursive queries are not allowed.")
 
-    _check_tables(statement)
+    _check_tables(statement, scope)
 
     return statement.sql(dialect="sqlite", comments=False)
 
 
-def _check_tables(statement: exp.Expression) -> None:
+def _check_tables(statement: exp.Expression, scope: frozenset[str]) -> None:
     cte_names = {cte.alias_or_name.lower() for cte in statement.find_all(exp.CTE)}
     for table in statement.find_all(exp.Table):
         if not isinstance(table.this, exp.Identifier):
@@ -94,10 +109,10 @@ def _check_tables(statement: exp.Expression) -> None:
         if table.args.get("db") or table.args.get("catalog"):
             raise UnsafeSQLError("Schema-qualified table names are not allowed.")
         name = table.name.lower()
-        if name not in ALLOWED_TABLES and name not in cte_names:
+        if name not in scope and name not in cte_names:
             raise UnsafeSQLError(
                 f"Table '{table.name}' is not available. "
-                f"Allowed tables: {', '.join(sorted(ALLOWED_TABLES))}."
+                f"Allowed tables: {', '.join(sorted(scope))}."
             )
 
 
@@ -107,13 +122,14 @@ class ReadOnlyAuthorizer:
     Records the reason for the first denial so callers can report it clearly.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, allowed_tables: Iterable[str] = ALLOWED_TABLES) -> None:
+        self.allowed_tables = table_scope(allowed_tables)
         self.denied_reason: str | None = None
 
     def __call__(self, action, arg1, arg2, db_name, trigger_name):
         if action == sqlite3.SQLITE_SELECT:
             return sqlite3.SQLITE_OK
-        if action == sqlite3.SQLITE_READ and arg1 in ALLOWED_TABLES:
+        if action == sqlite3.SQLITE_READ and arg1 and arg1.lower() in self.allowed_tables:
             return sqlite3.SQLITE_OK
         if action == sqlite3.SQLITE_FUNCTION and arg2 and arg2.lower() in ALLOWED_FUNCTIONS:
             return sqlite3.SQLITE_OK

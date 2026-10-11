@@ -18,18 +18,24 @@ EXAMPLE_SQL = (
 
 def render() -> None:
     db_path = session.db_path()
+    target = session.current_target(db_path)
+    tables = " and ".join(sorted(target.scope))
     theme.page_header("SQL Explorer", "Inspect and run read-only SQL",
-                      "Only a single SELECT on the products and sales tables is allowed. Every query is "
-                      "validated, run read-only with a time limit, and recorded in history.")
+                      f"Only a single SELECT on the {tables} table{'s' if len(target.scope) > 1 else ''} of "
+                      "the selected dataset is allowed. Every query is validated, run read-only with a time "
+                      "limit, and recorded in history.",
+                      theme.badge("muted", f"Dataset: {target.dataset.name}"))
 
     preset = st.session_state.pop("explorer_preset", None)
     if preset is not None:
         st.session_state["custom_sql"] = preset
 
-    last_ai_sql = next((t.answer.sql for t in reversed(session.chat()) if t.answer and t.source == "ai"), None)
+    last_ai_sql = next((t.answer.sql for t in reversed(session.chat())
+                        if t.answer and t.source == "ai" and t.answer.dataset_id == target.dataset_id), None)
+    example = EXAMPLE_SQL if target.is_demo else f"SELECT *\nFROM {target.dataset.tables[0].name}\nLIMIT 10"
     with st.container(border=True, key="card_editor"):
         with st.form("sql_form", border=False):
-            st.text_area("SQL query", key="custom_sql", height=150, placeholder=EXAMPLE_SQL)
+            st.text_area("SQL query", key="custom_sql", height=150, placeholder=example)
             run, _ = st.columns([1, 3])
             submitted = run.form_submit_button("Run SQL", type="primary", icon=":material/play_arrow:",
                                                width="stretch")

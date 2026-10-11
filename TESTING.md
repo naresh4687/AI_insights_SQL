@@ -20,16 +20,23 @@ temporary database, and AI Mode is tested against `FakeGemini` and `FakeHF`
 (`tests/conftest.py`): real HTTP servers on 127.0.0.1 that answer like the Gemini and
 Hugging Face APIs, with dummy keys. The official Gemini SDK runs unchanged against the
 fake (via `GEMINI_BASE_URL`). An autouse fixture removes any real AI keys loaded from
-`.env`, so no automated test can use them.
+`.env`, so no automated test can use them. Two more autouse fixtures point the app
+metadata and dataset stores at each test's temporary folder (never `data/`), and undo
+`configure_logging()` after each test so log redaction cannot hide a secret that a test
+checks is never logged.
 `scripts/check_ai_mode.py` is a separate, manual check against the real model.
 
 ## Test layers
 
 | Layer | Files | What it proves |
 |-------|-------|----------------|
-| Unit | `test_database.py`, `test_sql_guard.py`, `test_insights.py`, `test_gemini_service.py`, `test_hf_service.py` | Each module on its own: schema and seed data, SQL validation and the engine-level authorizer, chart choice and explanations, the Gemini and Hugging Face clients (keys, errors, privacy, provider choice) |
-| Integration | `test_query_service.py`, `test_demo_mode.py`, `test_ai_mode.py`, `test_gemini_ai_mode.py` | Question → SQL source → validation → read-only execution → history, for Demo Mode, typed SQL and AI Mode, including each safety layer switched off in turn |
-| App (no browser) | `test_app_ui.py` | `app.py` run by Streamlit's `AppTest` on every page: navigation, KPIs and chart data checked against the database, chat state across reruns and pages, history search/rerun, SQL Explorer security, settings, empty states |
+| Unit | `test_database.py`, `test_sql_guard.py`, `test_query_scope.py`, `test_catalog.py`, `test_logging_setup.py`, `test_ingest_readers.py`, `test_ingest_profile.py`, `test_ingest_preprocess.py`, `test_ingest_store.py` (import: reading, detection, cleaning, all-or-nothing saving), `test_analysis.py`, `test_explain_export_charts.py` (charts, facts, SQL explanations, error hints, CSV export), `test_insights.py`, `test_gemini_service.py`, `test_hf_service.py` | Each module on its own: schema and seed data, SQL validation and the engine-level authorizer, chart choice and explanations, the Gemini and Hugging Face clients (keys, errors, privacy, provider choice) |
+| Integration | `test_dataset_integration.py` (imported datasets: scope isolation, AI prompt, history), `test_query_service.py`, `test_demo_mode.py`, `test_ai_mode.py`, `test_gemini_ai_mode.py` | Question → SQL source → validation → read-only execution → history, for Demo Mode, typed SQL and AI Mode, including each safety layer switched off in turn |
+| Connectors | `test_connector_security.py`, `test_connector_rest.py` (fake API in `tests/servers.py`), `test_connector_databases.py` (real PostgreSQL 17 and MySQL 8.4 in throwaway Docker containers, marker `docker`; skipped with the reason if Docker or the images are missing) | SSRF policy, encrypted secrets, read-only sessions, pagination, limits, type mapping, import of snapshots |
+| Refresh | `test_refresh.py` (fake API: full refresh, failures keep the last good data, retries, locks, schedule, worker), `test_refresh_databases.py` (Docker: incremental and full refresh on PostgreSQL and MySQL) | No failed refresh changes data; no duplicates; correct counts |
+| Dashboards | `test_dashboards.py` | Storage rules, layout, filters checked against pandas, injection via filter values, tampered stored SQL, scope of imported datasets, export without data |
+| Accounts and access | `test_accounts.py` (sign-in rules, roles, last-admin protection, access matrix, private and shared datasets/dashboards, connections per owner, per-user history, append-only audit log, migration of existing data), `test_auth_ui.py` (AppTest: the sign-in gate fails closed, pages per role, data per user, sharing, Users & Audit) | Nobody gets in without an allowed, verified identity; each user reaches only their own and shared items, through every page |
+| App (no browser) | `test_app_ui.py`, `test_import_ui.py`, `test_dataset_ui.py`, `test_analyst_features_ui.py`, `test_connections_ui.py`, `test_datasets_ui.py`, `test_studio_ui.py` | `app.py` run by Streamlit's `AppTest` on every page: navigation, KPIs and chart data checked against the database, chat state across reruns and pages, history search/rerun, SQL Explorer security, settings, empty states |
 | End-to-end (browser) | `test_app_e2e.py` | The real server in Chrome: sidebar navigation with active-page marking, chat with Enter key, tabs, spinner, error styling, history → Explorer revalidation, separate sessions, 375 px and 768 px layouts, no console errors, screenshots |
 
 ## AI-assisted test design workflow
@@ -90,6 +97,11 @@ page. This is recorded as an open UI issue.
 | History reruns are revalidated | `test_app_ui.py::test_tampered_history_*`; `test_app_e2e.py::test_history_sql_opens_in_explorer_and_is_revalidated` |
 | Secrets never displayed | `test_app_ui.py::test_settings_never_shows_the_key_*`, `test_hf_token_never_shown`; `test_app_e2e.py::test_settings_shows_status_but_never_the_key` |
 | Clear errors for empty, unsupported and unsafe input | `test_app_ui.py`; `test_app_e2e.py` error tests |
+| Sign-in required and fails closed (no settings → no access) | `test_auth_ui.py::test_without_sign_in_settings_the_app_stays_closed`, `test_incomplete_settings_are_named_without_values`, `test_visitor_sees_only_the_sign_in_screen` |
+| Only invited / allowed, verified identities; no account takeover by email | `test_accounts.py::test_uninvited_*`, `test_allowed_domain_*`, `test_same_email_from_another_identity_is_refused`, `test_unverified_email_is_refused`, `test_disabled_account_is_refused` |
+| Roles (viewer / editor / admin) | `test_accounts.py::test_access_matrix`, `test_only_admins_manage_users`, `test_at_least_one_admin_remains`; `test_auth_ui.py::test_pages_follow_the_role`, `test_viewer_cannot_*` |
+| Per-user datasets, dashboards, connections, history | `test_accounts.py::test_private_datasets_are_invisible_to_others`, `test_shared_dashboard_does_not_reveal_a_private_dataset`, `test_connections_are_listed_for_their_owner_only`, `test_history_is_kept_per_user`; `test_auth_ui.py::test_dataset_selector_*`, `test_history_is_per_user` |
+| Audit log of changes | `test_accounts.py::test_audit_log_cannot_be_changed`, `test_role_changes_and_invites_are_audited`; `test_auth_ui.py::test_owner_shares_*` |
 | Works on a phone-sized screen | `test_app_e2e.py::test_narrow_screen_has_no_horizontal_scroll` + screenshots |
 
 ## Not covered
@@ -97,4 +109,6 @@ page. This is recorded as an open UI issue.
 - The real Gemini model (run `scripts/check_ai_mode.py` with `GEMINI_API_KEY` set). The fake proves the app handles
   any reply safely, not that a real model writes correct SQL.
 - Browsers other than Chromium/Chrome.
+- The real sign-in round trip with Google or Microsoft (`st.login`): tests replace the provider with fixed
+  identity claims (`auth.identity`). Try it by hand once with your own provider settings.
 - Accessibility (screen readers, contrast) beyond visible text and roles.

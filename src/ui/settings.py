@@ -31,7 +31,8 @@ def render() -> None:
     with st.container(border=True, key="card_security"):
         st.markdown("**How queries are kept safe**")
         st.markdown(
-            "- Only one read-only `SELECT` on the `products` and `sales` tables is accepted.\n"
+            "- Only one read-only `SELECT` on the selected dataset's own tables is accepted "
+            "(`products` and `sales` for the demo data); other datasets and internal tables are blocked.\n"
             "- A database-level authorizer blocks writes, other tables and unsafe functions.\n"
             "- Queries run on a read-only connection with a 3-second limit and at most 1,000 rows.\n"
             "- AI-written SQL, SQL from history and SQL typed in the SQL Explorer all go through these checks."
@@ -90,6 +91,7 @@ def _database_section(db_path) -> None:
         shown_path = db_path.name
     st.markdown(
         f"- File: `{shown_path}`\n"
-        f"- Products: **{kpis.products:,}** · Sales: **{kpis.sales:,}**\n"
-        f"- Query history entries: **{history:,}**"
+        f"- Products: **{kpis.products:,}** · Sales: **{kpis.sales:,}**"
+        # The total covers every user's questions: shown without sign-in and to administrators only.
+        + (f"\n- Query history entries: **{history:,}**" if session.current_user().is_admin else "")
     )

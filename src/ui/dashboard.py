@@ -101,7 +101,7 @@ def _recent_activity(db_path) -> None:
                      width="stretch"):
         st.switch_page(session.PAGES["analyst"])
 
-    rows = database.recent_history(db_path, limit=5)
+    rows = database.recent_history(db_path, limit=5, user_id=session.history_user())
     if not rows:
         theme.empty_state("No questions asked yet", "Questions you ask in the AI Analyst will appear here.")
         return

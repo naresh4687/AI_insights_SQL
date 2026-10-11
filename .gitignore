@@ -13,6 +13,7 @@ __pycache__/
 
 # Generated databases (recreate with: python scripts/seed_database.py)
 data/*.db
+data/uploads/
 *.db-journal
 
 # Test artefacts
