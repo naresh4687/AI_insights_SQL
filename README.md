@@ -166,3 +166,4 @@ token in the repository. Without it, the deployed app runs in Demo Mode.
 - At desktop width, the example question buttons cut off long questions with "…".
 - Charts are drawn only for results with one label column and one numeric column.
 - Browser tests run in Chromium/Chrome only.
+# AI_insights_SQL
