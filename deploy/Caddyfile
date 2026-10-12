@@ -1,0 +1,20 @@
+# HTTPS reverse proxy in front of the app (Caddy). SITE_ADDRESS comes from .env:
+#   a domain name (insights.example.com) → Caddy gets and renews a free HTTPS certificate;
+#   http://localhost (default)           → plain HTTP on this computer only.
+{$SITE_ADDRESS:http://localhost} {
+	encode zstd gzip
+
+	# Imports allow 25 MB files ([server] maxUploadSize); leave room for the form around them.
+	request_body {
+		max_size 26MB
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	# WebSockets (which Streamlit needs) are passed through automatically.
+	reverse_proxy app:8501
+}

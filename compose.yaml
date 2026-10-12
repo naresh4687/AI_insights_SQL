@@ -1,0 +1,69 @@
+# InsightSQL with Docker Compose. Step-by-step guide: DEPLOYMENT.md
+#
+#   docker compose up -d --build     start (or update) everything
+#   docker compose ps                status
+#   docker compose logs -f app       app messages
+#
+# Settings come from .env (copy .env.example). Data lives in the "data" volume; daily backups
+# go to ./backups. With sign-in on, add compose.signin.yaml (see DEPLOYMENT.md).
+name: insightsql
+
+x-insightsql: &insightsql
+  build: .
+  image: insightsql:latest
+  env_file:
+    - path: ${INSIGHTSQL_ENV_FILE:-.env}   # another file can be chosen (the tests do)
+      required: false
+  environment: &paths
+    # Fixed inside the containers (these override any paths in .env, which are for local runs).
+    INSIGHTSQL_DB_PATH: /data/insightsql.db
+    INSIGHTSQL_APP_DB_PATH: /data/app.db
+    INSIGHTSQL_DATASETS_DB_PATH: /data/datasets.db
+    INSIGHTSQL_UPLOADS_DIR: /data/uploads
+    INSIGHTSQL_BACKUP_DIR: /backups
+    TZ: ${TZ:-UTC}
+  restart: unless-stopped
+
+services:
+  app:
+    <<: *insightsql
+    volumes:
+      - data:/data
+    expose:
+      - "8501"   # reached only through the proxy
+
+  worker:
+    <<: *insightsql
+    # Scheduled dataset refreshes, and the daily backup.
+    command: >-
+      python scripts/refresh_worker.py --loop --interval 60
+      --backup-at ${INSIGHTSQL_BACKUP_AT:-02:00} --backup-dir /backups --backup-keep ${INSIGHTSQL_BACKUP_KEEP:-7}
+    volumes:
+      - data:/data
+      - ${BACKUP_DIR:-./backups}:/backups   # on this computer: copy them off it regularly
+    healthcheck:
+      disable: true
+    depends_on:
+      app:
+        condition: service_healthy   # the app creates the databases on first start
+
+  proxy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-http://localhost}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data       # HTTPS certificates: keep this volume
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+
+volumes:
+  data:
+  caddy_data:
+  caddy_config:

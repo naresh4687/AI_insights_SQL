@@ -268,6 +268,10 @@ box and add `INSIGHTSQL_AUTH = "oidc"` and `INSIGHTSQL_ADMIN_EMAILS = "you@examp
 Community Cloud's disk is temporary: accounts, imported data and dashboards are lost when the
 app restarts, so use a server with a persistent disk for real use.
 
+## Deployment
+
+Run it on a server with Docker: the app, a worker for scheduled refreshes and daily backups, and an HTTPS proxy. Step-by-step guide and production checklist: [DEPLOYMENT.md](DEPLOYMENT.md).
+
 ## Known limitations
 
 - A small local model can write SQL that is safe but wrong (for example, a wrong
@@ -287,4 +291,3 @@ app restarts, so use a server with a persistent disk for real use.
   already took is refused ("already exists").
 - Sign-in is tested with a stand-in for the identity provider; the real Google/Microsoft
   round trip is not part of the automated tests.
-# AI_insights_SQL

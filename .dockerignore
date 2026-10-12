@@ -1,0 +1,33 @@
+# Only what the app needs goes into the image. Above all, never secrets or data:
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+data/
+backups/
+*.db
+*.db-journal
+
+# Development and test files
+.git/
+.venv/
+venv/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+tests/
+test-results/
+playwright-report/
+reports/
+requirements-dev.txt
+.agents/
+.claude/
+.vscode/
+.idea/
+.DS_Store
+
+# Deployment files themselves
+Dockerfile
+.dockerignore
+compose*.yaml
+deploy/

@@ -1,0 +1,7 @@
+# Add this file when sign-in is on (INSIGHTSQL_AUTH=oidc): it gives the app the sign-in settings
+# in .streamlit/secrets.toml, read-only. Easiest: put this line in .env
+#   COMPOSE_FILE=compose.yaml:compose.signin.yaml
+services:
+  app:
+    volumes:
+      - ./.streamlit/secrets.toml:/app/.streamlit/secrets.toml:ro
