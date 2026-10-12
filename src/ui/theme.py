@@ -49,6 +49,10 @@ LIGHT = {
     "success": "#146B3E",
     "warning": "#8A5300",
     "error": "#B3261E",
+    "success_bg": "#DCEBE1",          # alert and badge backgrounds; their text is 5:1 or more on them
+    "warning_bg": "#F3E6CF",
+    "error_bg": "#F6DEDA",
+    "info_bg": "#DCE4EF",
     "chart_label": "#3F3E3A",
     "chart_grid": "rgba(0, 0, 0, .08)",
     "code_text": "#1F3A63",
@@ -80,6 +84,10 @@ DARK = {
     "success": "#3DD68C",
     "warning": "#F5B841",
     "error": "#F87171",
+    "success_bg": "#12301F",
+    "warning_bg": "#33280F",
+    "error_bg": "#3A1A1C",
+    "info_bg": "#1A2740",
     "chart_label": "#C9CFDA",
     "chart_grid": "rgba(239, 236, 227, .10)",
     "code_text": "#C9D7EC",
@@ -140,13 +148,13 @@ CSS = """
   border-radius: var(--isql-radius-pill); font-size: .78rem; font-weight: 600; border: 1px solid;
   white-space: nowrap; }
 .isql-badge--ok { color: var(--isql-success); border-color: color-mix(in srgb, var(--isql-success) 40%, transparent);
-  background: color-mix(in srgb, var(--isql-success) 9%, transparent); }
+  background: var(--isql-success-bg); }
 .isql-badge--warn { color: var(--isql-warning); border-color: color-mix(in srgb, var(--isql-warning) 40%, transparent);
-  background: color-mix(in srgb, var(--isql-warning) 9%, transparent); }
+  background: var(--isql-warning-bg); }
 .isql-badge--error { color: var(--isql-error); border-color: color-mix(in srgb, var(--isql-error) 40%, transparent);
-  background: color-mix(in srgb, var(--isql-error) 9%, transparent); }
+  background: var(--isql-error-bg); }
 .isql-badge--info { color: var(--isql-accent-text); border-color: color-mix(in srgb, var(--isql-primary) 45%, transparent);
-  background: color-mix(in srgb, var(--isql-primary) 10%, transparent); }
+  background: var(--isql-info-bg); }
 .isql-badge--muted { color: var(--isql-muted); border-color: var(--isql-border); background: transparent; }
 .isql-meta { color: var(--isql-muted); font-size: .82rem; }
 
@@ -268,7 +276,7 @@ CSS = """
   box-shadow: 0 6px 16px -8px var(--isql-primary);
   transition: background-color .15s var(--isql-ease), box-shadow .15s var(--isql-ease), transform .15s var(--isql-ease); }
 [data-testid="stBaseButton-primary"]:hover:not(:disabled), [data-testid="stBaseButton-primaryFormSubmit"]:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--isql-primary) 86%, var(--isql-text)); color: var(--isql-on-primary);
+  background: color-mix(in srgb, var(--isql-primary) 86%, black); color: var(--isql-on-primary);  /* darker in both themes */
   transform: translateY(-1px); }
 button:disabled { cursor: not-allowed; }
 
@@ -290,8 +298,9 @@ button:disabled { cursor: not-allowed; }
 [data-testid="stTabs"] button[role="tab"][aria-selected="true"] p { font-weight: 600; }
 
 /* Expanders, chat messages, code, tables and the file drop zone: glass panels */
+/* No blur on expanders: most sit inside a blurred card, and a second blur layer turns them grey */
 [data-testid="stExpander"] details { background: var(--isql-glass); border-color: var(--isql-border);
-  border-radius: var(--isql-radius-md); -webkit-backdrop-filter: blur(var(--isql-blur)); backdrop-filter: blur(var(--isql-blur)); }
+  border-radius: var(--isql-radius-md); }
 [data-testid="stExpander"] summary:hover { color: var(--isql-accent-text); }
 [data-testid="stChatMessage"] { background: var(--isql-glass); border: 1px solid var(--isql-border);
   border-radius: var(--isql-radius-lg); padding: var(--isql-space-4); }
@@ -305,7 +314,7 @@ button:disabled { cursor: not-allowed; }
   border-radius: var(--isql-radius-md); transition: border-color .15s var(--isql-ease), background-color .15s var(--isql-ease); }
 [data-testid="stFileUploaderDropzone"]:hover { border-color: var(--isql-primary);
   background: color-mix(in srgb, var(--isql-primary) 6%, var(--isql-glass)); }
-[data-testid="stForm"] { background: var(--isql-glass); border-color: var(--isql-border); border-radius: var(--isql-radius-lg); }
+[data-testid="stForm"] { border-color: var(--isql-border); border-radius: var(--isql-radius-lg); }  /* usually inside a card */
 
 /* Alerts: rounded, with a coloured edge (the icon and text still say what kind of message it is) */
 [data-testid="stAlertContainer"] { border-radius: var(--isql-radius-md); border: 1px solid color-mix(in srgb, currentColor 22%, transparent); }

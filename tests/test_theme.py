@@ -62,6 +62,8 @@ CONFIG_KEYS = {
     "greenColor": "success", "greenTextColor": "success", "yellowColor": "warning", "yellowTextColor": "warning",
     "redColor": "error", "redTextColor": "error", "blueColor": "primary", "blueTextColor": "accent_text",
     "violetColor": "primary", "violetTextColor": "accent_text",
+    "greenBackgroundColor": "success_bg", "yellowBackgroundColor": "warning_bg", "redBackgroundColor": "error_bg",
+    "blueBackgroundColor": "info_bg", "violetBackgroundColor": "info_bg",
 }
 
 
@@ -107,6 +109,15 @@ def test_text_contrast(mode, token, backgrounds):
 
 
 @pytest.mark.parametrize("mode", ["light", "dark"])
+@pytest.mark.parametrize("status, text", [("success", "success"), ("warning", "warning"), ("error", "error"),
+                                          ("info", "accent_text")])
+def test_alert_and_badge_text_on_their_backgrounds(mode, status, text):
+    t = theme.THEMES[mode]
+    assert contrast(t[text], t[f"{status}_bg"]) >= 4.5  # the coloured status text
+    assert contrast(t["text"], t[f"{status}_bg"]) >= 4.5  # the message itself
+
+
+@pytest.mark.parametrize("mode", ["light", "dark"])
 def test_controls_contrast(mode):
     t = theme.THEMES[mode]
     assert contrast(t["on_primary"], t["primary"]) >= 4.5  # button text
@@ -119,6 +130,13 @@ def test_controls_contrast(mode):
 def test_chart_colours_are_visible_on_both_themes(colour):
     assert contrast(colour, theme.LIGHT["bg"]) >= 3
     assert contrast(colour, theme.DARK["bg"]) >= 3
+
+
+def test_primary_button_hover_darkens_in_both_themes():
+    # A hover mixed towards the (light) dark-theme text colour would wash out the white label.
+    assert "color-mix(in srgb, var(--isql-primary) 86%, black)" in theme.CSS
+    hover = "#" + "".join(f"{round(int(theme.PALETTE['primary'][i:i + 2], 16) * .86):02X}" for i in (1, 3, 5))
+    assert contrast("#FFFFFF", hover) >= 4.5
 
 
 def test_light_text_on_white_glass_cards():

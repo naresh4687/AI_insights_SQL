@@ -972,30 +972,33 @@ PAGE_PATHS = {"Dashboard": "", "AI Analyst": "analyst", "Dashboard Studio": "stu
 
 
 @pytest.mark.parametrize("width, height", [(1280, 900), (768, 1024), (375, 812)])
-def test_every_page_in_dark_mode_fits_without_errors(browser, live_app, fake, width, height):
-    """Every page in the dark theme at desktop, tablet and phone width: drawn in dark, no sideways
-    scrolling, no console errors (light is covered by the rest of this file). On desktop the pages
-    are opened with the sidebar; on smaller screens by their address, which also shows the choice
-    is kept when a page is opened directly."""
+@pytest.mark.parametrize("mode", ["light", "dark"])
+def test_every_page_in_both_themes_fits_without_errors(browser, live_app, fake, mode, width, height):
+    """Every page in each theme at desktop, tablet and phone width: drawn in that theme, no
+    sideways scrolling, no console errors. On desktop the pages are opened with the sidebar; on
+    smaller screens by their address, which also shows the choice is kept when a page is opened
+    directly."""
+    from src.ui import theme
     page = _open(browser, live_app.url, width=width, height=height)
     track_not_found(page)
     try:
-        if width < 800:  # the sidebar starts closed on small screens
-            page.get_by_test_id("stExpandSidebarButton").click()
-        theme_switch(page).click()
-        expect_theme(page, "dark")
+        if mode == "dark":
+            if width < 800:  # the sidebar starts closed on small screens
+                page.get_by_test_id("stExpandSidebarButton").click()
+            theme_switch(page).click()
+        expect_theme(page, mode)
         for name, path in PAGE_PATHS.items():
             if width < 800:
                 page.goto(f"{live_app.url}/{path}")
                 expect(page.get_by_text(PAGE_HEADINGS[name])).to_be_visible()
-                expect(page.locator("html")).to_have_attribute("data-isql-theme", "dark")
-                expect(page.locator(".stApp")).to_have_css("background-color", _rgb("#0F1520"))
+                expect(page.locator("html")).to_have_attribute("data-isql-theme", mode)
+                expect(page.locator(".stApp")).to_have_css("background-color", _rgb(theme.THEMES[mode]["bg"]))
                 close_sidebar(page)
             else:
                 go(page, name)
-                expect_theme(page, "dark")
+                expect_theme(page, mode)
             assert not has_horizontal_overflow(page), name
-            screenshot(page, f"dark-{width}-{path or 'dashboard'}")
+            screenshot(page, f"{mode}-{width}-{path or 'dashboard'}")
         assert unexpected_errors(page) == []
     finally:
         page.context.close()

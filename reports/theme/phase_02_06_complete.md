@@ -100,4 +100,20 @@ No business logic, queries, AI prompts, schemas or data handling changed.
 | K2 | Very first visit with the OS in dark mode: a brief dark frame before light is applied (only once; later visits start in the saved theme) |
 | K3 | Opening a page's address directly makes Streamlit request `/<page>/_stcore/health` and `/host-config` first (two 404s in the console). This comes from Streamlit's own address lookup, not from the theme code; the tests allow exactly these two and fail on any other 404 |
 | K4 | Data tables are drawn on a canvas: themed through `config.toml` only, no glass |
-| K5 | Logo wordmark meets the large-text ratio (3:1), not the normal-text ratio (4.5:1) — one colour cannot reach 4.5:1 on both sidebars |
+| K5 | Logo wordmark meets the large-text ratio (3:1), not the normal-text ratio (4.5:1) — one colour cannot reach 4.5:1 on both sidebars. **Corrected in Phase 07:** before it, the wordmark was drawn at only ~13 px, so it did not actually count as large text; it is now ~19 px bold |
+
+---
+
+# Phase 07 — Polish (approved: "do 1 and 2")
+
+| Item | Change | Verified |
+|------|--------|----------|
+| Grey collapsed sections in dark | Cause: expanders sit inside blurred cards, and their own second blur layer lightened them (pixel 60,65,74 on a 33,39,49 card). Expanders no longer blur: now 43,48,58, a gentle tint | Pixel measurement in the browser |
+| Inner box in forms (SQL Explorer) | Forms no longer add a second glass layer inside their card; border only | Screenshot |
+| Primary button hover in dark | Hover mixed towards the light text colour, washing out the white label. Now darkens in both themes (white on `#406091`, 6.4:1) | Unit test |
+| Status colours in Streamlit's widgets | New `success_bg` / `warning_bg` / `error_bg` / `info_bg` tokens for both themes, set as Streamlit's green/yellow/red/blue/violet background colours (all 36 alerts) and used by the app's own badges, so both match | Alert background in the browser equals the token in both themes; coloured text ≥ 5.1:1 and message text ≥ 12:1 on them (unit tests) |
+| Logo size | Tighter drawing (viewBox 192×40, wordmark 24): shows at ~19 px bold instead of ~13 px. Large text, so `#4A70A9` (3.7:1 / 3.8:1) meets 3:1 | Logo box 154×32 px in the browser |
+| Light-mode page check (item 2) | `test_every_page_in_both_themes_fits_without_errors[light|dark × 1280|768|375]`: every page drawn in the theme, no sideways scrolling, no console errors | 6 runs pass |
+
+Files: `src/ui/theme.py`, `.streamlit/config.toml`, `assets/logo.svg`, `tests/test_theme.py` (68 tests),
+`tests/test_app_e2e.py`, `TESTING.md`. Screenshots: `test-results/e2e/{light,dark}-{1280,768,375}-*.png`.

@@ -34,6 +34,11 @@ blueColor = "#4A70A9"
 blueTextColor = "#3B5D8F"
 violetColor = "#4A70A9"
 violetTextColor = "#3B5D8F"
+greenBackgroundColor = "#DCEBE1"
+yellowBackgroundColor = "#F3E6CF"
+redBackgroundColor = "#F6DEDA"
+blueBackgroundColor = "#DCE4EF"
+violetBackgroundColor = "#DCE4EF"
 linkUnderline = false
 chartCategoricalColors = ["#4A70A9", "#2E8A87", "#B4693C", "#7A5BA6", "#5E8C3A", "#B04F6E"]
 
@@ -63,6 +68,11 @@ blueColor = "#4A70A9"
 blueTextColor = "#8FABD4"
 violetColor = "#4A70A9"
 violetTextColor = "#8FABD4"
+greenBackgroundColor = "#12301F"
+yellowBackgroundColor = "#33280F"
+redBackgroundColor = "#3A1A1C"
+blueBackgroundColor = "#1A2740"
+violetBackgroundColor = "#1A2740"
 linkUnderline = false
 chartCategoricalColors = ["#4A70A9", "#2E8A87", "#B4693C", "#7A5BA6", "#5E8C3A", "#B04F6E"]
 
