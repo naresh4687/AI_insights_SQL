@@ -48,10 +48,13 @@ the permission "Make calls to Inference Providers"; requires Inference Providers
 
 ## Using the app
 
-InsightSQL has a dark, sidebar-based interface. The sidebar holds the page links, the
+InsightSQL has a sidebar-based interface in a light theme (warm off-white with blue accents)
+and a matching dark theme. The sidebar holds the page links, the
 **Mode** selector (Demo Mode or AI Mode), the **Dataset** selector (the demo sales data or
-any imported dataset; used by the AI Analyst and SQL Explorer) and a status card showing
-whether the selected mode is ready. On a phone the sidebar starts collapsed; open it with the arrow at top left.
+any imported dataset; used by the AI Analyst and SQL Explorer), a status card showing
+whether the selected mode is ready, and the **Dark mode** switch. Switching theme is instant and
+keeps everything on the page (answers, filters, chat); the browser remembers the choice, and the
+first visit is always light. On a phone the sidebar starts collapsed; open it with the arrow at top left.
 
 | Page | What it does |
 |------|--------------|
@@ -190,10 +193,10 @@ requirement traceability.
 ```
 app.py                  Page setup, sidebar (mode + status) and navigation
 views/                  One small file per page; each calls src/ui/<page>.py
-.streamlit/config.toml  Dark theme (colours, fonts, radii, chart palette)
+.streamlit/config.toml  Light (default) and dark themes (palette, fonts, radii, chart colours)
 assets/                 Logo and icon (SVG)
 src/
-  ui/                   Interface only: theme.py (CSS + chart theme), charts.py (Altair),
+  ui/                   Interface only: theme.py (light/dark tokens, CSS, chart theme), charts.py (Altair),
                         components.py, session.py (state; the UI's one call into the
                         query pipeline), dashboard.py, analyst.py, history.py,
                         explorer.py, settings.py

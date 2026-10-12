@@ -78,7 +78,7 @@ def _charts(db_path) -> None:
     with right, st.container(border=True, key="chart_region"):
         st.markdown("**Revenue by region**")
         st.caption("Total revenue per sales region.")
-        charts.show(charts.bar(analytics.revenue_by_region(db_path), "region", "revenue", color="#22D3EE"),
+        charts.show(charts.bar(analytics.revenue_by_region(db_path), "region", "revenue", color=charts.SECONDARY),
                     "Bar chart of revenue by region", key="dash_region")
 
     left, right = st.columns(2)
@@ -90,7 +90,7 @@ def _charts(db_path) -> None:
     with right, st.container(border=True, key="chart_products"):
         st.markdown("**Top products by revenue**")
         st.caption("The five products with the highest revenue.")
-        charts.show(charts.bar(analytics.top_products(db_path), "product_name", "revenue", color="#A78BFA"),
+        charts.show(charts.bar(analytics.top_products(db_path), "product_name", "revenue", color=charts.PRIMARY),
                     "Bar chart of the five products with the highest revenue", key="dash_products")
 
 

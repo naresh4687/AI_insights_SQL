@@ -87,5 +87,6 @@ def sidebar_status() -> None:
 with st.sidebar:
     auth.sidebar_account(user)
     sidebar_status()
+    theme.theme_toggle()
 
 pages.run()

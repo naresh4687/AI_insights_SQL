@@ -6,7 +6,9 @@ import pandas as pd
 import streamlit as st
 
 from src import insights
-from src.ui.theme import COLORS, chart_config
+from src.ui.theme import CHART_COLORS, chart_config
+
+PRIMARY, SECONDARY = CHART_COLORS[0], CHART_COLORS[1]  # readable on both themes
 
 
 def _number_format(series: pd.Series) -> str:
@@ -17,7 +19,7 @@ def bar(data: pd.DataFrame, label: str, value: str, title: str | None = None, co
     """Horizontal bars sorted largest first (labels stay readable at any width)."""
     label_title, value_title = insights.humanize(label).capitalize(), insights.humanize(value).capitalize()
     chart = alt.Chart(data, title=title or alt.Undefined).mark_bar(
-        color=color or COLORS["violet"], cornerRadiusEnd=4, height={"band": 0.7}
+        color=color or PRIMARY, cornerRadiusEnd=4, height={"band": 0.7}
     ).encode(
         y=alt.Y(f"{label}:N", sort="-x", title=label_title),
         x=alt.X(f"{value}:Q", title=value_title, axis=alt.Axis(format="~s")),
@@ -34,8 +36,8 @@ def line(data: pd.DataFrame, period: str, value: str, title: str | None = None) 
     which could exaggerate peaks), with a dot on every period."""
     period_title, value_title = insights.humanize(period).capitalize(), insights.humanize(value).capitalize()
     chart = alt.Chart(data, title=title or alt.Undefined).mark_line(
-        color=COLORS["cyan"], strokeWidth=2.5,
-        point=alt.OverlayMarkDef(color=COLORS["cyan"], size=55, filled=True),
+        color=PRIMARY, strokeWidth=2.5,
+        point=alt.OverlayMarkDef(color=PRIMARY, size=55, filled=True),
     ).encode(
         x=alt.X(f"{period}:O", title=period_title, axis=alt.Axis(labelAngle=-40)),
         y=alt.Y(f"{value}:Q", title=value_title, axis=alt.Axis(format="~s")),
@@ -72,7 +74,7 @@ def column(data: pd.DataFrame, label: str, value: str) -> alt.Chart:
     """Vertical bars. Periods keep their order; categories are sorted largest first."""
     label_title, value_title = _titles(label, value)
     sort = None if insights.is_period_column(data[label]) else "-y"
-    chart = alt.Chart(data).mark_bar(color=COLORS["violet"], cornerRadiusEnd=4).encode(
+    chart = alt.Chart(data).mark_bar(color=PRIMARY, cornerRadiusEnd=4).encode(
         x=alt.X(f"{label}:N", sort=sort, title=label_title, axis=alt.Axis(labelAngle=-40)),
         y=alt.Y(f"{value}:Q", title=value_title, axis=alt.Axis(format="~s")),
         tooltip=[alt.Tooltip(f"{label}:N", title=label_title),
@@ -84,7 +86,7 @@ def column(data: pd.DataFrame, label: str, value: str) -> alt.Chart:
 def area(data: pd.DataFrame, period: str, value: str) -> alt.Chart:
     period_title, value_title = _titles(period, value)
     chart = alt.Chart(data).mark_area(
-        color=COLORS["cyan"], opacity=0.35, line={"color": COLORS["cyan"], "strokeWidth": 2},
+        color=PRIMARY, opacity=0.35, line={"color": PRIMARY, "strokeWidth": 2},
     ).encode(
         x=alt.X(f"{period}:O", title=period_title, axis=alt.Axis(labelAngle=-40)),
         y=alt.Y(f"{value}:Q", title=value_title, axis=alt.Axis(format="~s")),
@@ -97,7 +99,8 @@ def area(data: pd.DataFrame, period: str, value: str) -> alt.Chart:
 def pie(data: pd.DataFrame, label: str, value: str, donut: bool = False) -> alt.Chart:
     """Parts of a whole (only offered for a few non-negative values)."""
     label_title, value_title = _titles(label, value)
-    chart = alt.Chart(data).mark_arc(innerRadius=70 if donut else 0, stroke=COLORS["bg"], strokeWidth=2).encode(
+    # The slice gap is white here; CSS sets it to the page background of the current theme.
+    chart = alt.Chart(data).mark_arc(innerRadius=70 if donut else 0, stroke="#FFFFFF", strokeWidth=2).encode(
         theta=alt.Theta(f"{value}:Q", stack=True),
         color=alt.Color(f"{label}:N", title=label_title, sort=alt.SortField(value, order="descending")),
         order=alt.Order(f"{value}:Q", sort="descending"),
@@ -112,7 +115,7 @@ def scatter(data: pd.DataFrame, x: str, y: str) -> alt.Chart:
     tooltip = [alt.Tooltip(f"{c}:N") for c in data.columns if c not in (x, y)][:2] + [
         alt.Tooltip(f"{x}:Q", title=x_title, format=_number_format(data[x])),
         alt.Tooltip(f"{y}:Q", title=y_title, format=_number_format(data[y]))]
-    chart = alt.Chart(data).mark_circle(color=COLORS["violet"], size=70, opacity=0.8).encode(
+    chart = alt.Chart(data).mark_circle(color=PRIMARY, size=70, opacity=0.8).encode(
         x=alt.X(f"{x}:Q", title=x_title, axis=alt.Axis(format="~s")),
         y=alt.Y(f"{y}:Q", title=y_title, axis=alt.Axis(format="~s")),
         tooltip=tooltip,
@@ -122,7 +125,7 @@ def scatter(data: pd.DataFrame, x: str, y: str) -> alt.Chart:
 
 def histogram(data: pd.DataFrame, value: str) -> alt.Chart:
     (value_title,) = _titles(value)
-    chart = alt.Chart(data).mark_bar(color=COLORS["violet"]).encode(
+    chart = alt.Chart(data).mark_bar(color=PRIMARY).encode(
         x=alt.X(f"{value}:Q", bin=alt.Bin(maxbins=20), title=value_title),
         y=alt.Y("count():Q", title="Number of rows"),
         tooltip=[alt.Tooltip(f"{value}:Q", bin=alt.Bin(maxbins=20), title=value_title),
@@ -137,7 +140,7 @@ def box(data: pd.DataFrame, value: str, group: str | None = None) -> alt.Chart:
     encoding = {"y": alt.Y(f"{value}:Q", title=value_title, axis=alt.Axis(format="~s"))}
     if group:
         encoding["x"] = alt.X(f"{group}:N", title=_titles(group)[0], axis=alt.Axis(labelAngle=-40))
-    chart = alt.Chart(data).mark_boxplot(color=COLORS["violet"], extent=1.5, size=40).encode(**encoding)
+    chart = alt.Chart(data).mark_boxplot(color=PRIMARY, extent=1.5, size=40).encode(**encoding)
     return chart.properties(height=300).configure(**chart_config())
 
 

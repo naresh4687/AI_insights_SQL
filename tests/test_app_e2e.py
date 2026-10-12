@@ -151,8 +151,8 @@ def browser():
         launched.close()
 
 
-def _open(browser, url: str, width: int = 1280, height: int = 900):
-    context = browser.new_context(viewport={"width": width, "height": height})
+def _open(browser, url: str, width: int = 1280, height: int = 900, color_scheme: str = "light"):
+    context = browser.new_context(viewport={"width": width, "height": height}, color_scheme=color_scheme)
     page = context.new_page()
     page.set_default_timeout(TIMEOUT_MS)
     page.console_errors = []
@@ -795,3 +795,207 @@ def test_answer_to_dashboard_in_the_browser(page, live_app):
     expect(card.locator("[data-testid=stVegaLiteChart] svg.marks")).to_be_visible()
     assert not has_horizontal_overflow(page)
     screenshot(page, "studio")
+
+
+# --- Theme (light / dark) ------------------------------------------------------------------
+
+THEME_STATE = """() => {
+  const style = (sel) => { const el = document.querySelector(sel); return el && getComputedStyle(el); };
+  const label = document.querySelector('.st-key-chart_region .vega-embed svg .role-axis-label text');
+  return {mode: document.documentElement.getAttribute('data-isql-theme'),
+          background: style('.stApp').backgroundColor, text: style('.stApp').color,
+          card: style('.st-key-kpi_revenue').backgroundColor, accent: style('.isql-eyebrow').color,
+          axisLabel: label && getComputedStyle(label).fill};
+}"""
+
+
+def _rgb(colour: str) -> str:
+    return "rgb({}, {}, {})".format(*(int(colour.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)))
+
+
+def theme_switch(page):
+    return page.get_by_role("switch", name="Dark mode")
+
+
+def current_theme(page) -> str:
+    return page.evaluate("getComputedStyle(document.querySelector('.stApp')).backgroundColor")
+
+
+def expect_theme(page, mode: str) -> None:
+    """The whole page shows ``mode``: Streamlit's colours, the app's marker and the switch."""
+    from src.ui import theme
+    expect(page.locator("html")).to_have_attribute("data-isql-theme", mode)
+    expect(page.locator(".stApp")).to_have_css("background-color", _rgb(theme.THEMES[mode]["bg"]))
+    expect(theme_switch(page)).to_have_attribute("aria-checked", str(mode == "dark").lower())
+
+
+# Opening a page's own address directly (for example /history after a reload) makes Streamlit first
+# look for its server one level down (/history/_stcore/health and /host-config): two expected 404s.
+STREAMLIT_PATH_PROBES = re.compile(r"/[a-z]+/_stcore/(health|host-config)$")
+
+
+def track_not_found(page) -> list[str]:
+    """Record every 404 the page receives (call before loading pages by their address)."""
+    page.not_found = []
+    page.on("response", lambda r: r.status == 404 and page.not_found.append(r.url))
+    return page.not_found
+
+
+def unexpected_errors(page) -> list[str]:
+    """Console errors, apart from those of Streamlit's own 404 address checks (the only 404s allowed)."""
+    unexpected_404 = [url for url in page.not_found if not STREAMLIT_PATH_PROBES.search(url)]
+    return unexpected_404 + [e for e in page.console_errors if "404 (Not Found)" not in e]
+
+
+def count_messages_to_server(page) -> None:
+    """From now on, count every message the page sends to the Streamlit server in
+    ``window.__isqlSent`` (a rerun, a widget change or a query would each send one)."""
+    page.evaluate("""() => { window.__isqlSent = 0; const send = WebSocket.prototype.send;
+        WebSocket.prototype.send = function (...args) { window.__isqlSent += 1; return send.apply(this, args); }; }""")
+
+
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+def test_first_visit_is_light_whatever_the_system_setting(browser, live_app, fake, scheme):
+    page = _open(browser, live_app.url, color_scheme=scheme)
+    try:
+        expect_theme(page, "light")
+        expect(theme_switch(page)).to_be_visible()
+        assert page.evaluate("localStorage.getItem('isql-theme')") == "light"
+        assert page.console_errors == []
+    finally:
+        page.context.close()
+
+
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+def test_every_themed_layer_uses_the_theme_colours(browser, live_app, fake, scheme):
+    """Streamlit widgets, the app's own CSS and chart text all show the chosen theme's colours."""
+    from src.ui import theme
+    page = _open(browser, live_app.url)
+    if scheme == "dark":
+        theme_switch(page).click()
+    expect_theme(page, scheme)
+    tokens = theme.THEMES[scheme]
+    page.locator(".st-key-chart_region .vega-embed svg .role-axis-label text").first.wait_for()
+    state = page.evaluate(THEME_STATE)
+    assert state == {"mode": scheme, "background": _rgb(tokens["bg"]), "text": _rgb(tokens["text"]),
+                     "card": tokens["glass_strong"].replace(" .", " 0."),  # browsers write 0.78, not .78
+                     "accent": _rgb(tokens["accent_text"]), "axisLabel": _rgb(tokens["chart_label"])}
+    screenshot(page, f"theme-{scheme}-dashboard")
+    errors = page.console_errors
+    page.context.close()
+    assert errors == [], errors
+
+
+def test_switching_theme_keeps_the_answer_and_runs_nothing(page, live_app, fake):
+    """A switch happens in the browser only: no message to the server (so no rerun, query or AI
+    request), the answer on screen stays, and focus stays on the switch."""
+    go(page, "AI Analyst")
+    page.locator(".st-key-example_0 button").click()
+    result = answer(page, 0)
+    open_tab(result, "Visualization")
+    expect(result.locator("[data-testid=stVegaLiteChart] svg.marks")).to_be_visible()
+    history = database.history_count(live_app.db_path)
+    count_messages_to_server(page)
+
+    switch = theme_switch(page)
+    switch.click()
+    expect_theme(page, "dark")
+    expect(switch).to_be_focused()
+    screenshot(page, "theme-dark-analyst")
+    page.keyboard.press("Space")
+    expect_theme(page, "light")
+    page.keyboard.press("Enter")
+    expect_theme(page, "dark")
+
+    page.wait_for_timeout(500)
+    assert page.evaluate("window.__isqlSent") == 0, "switching the theme must not talk to the server"
+    expect(answer(page, 0).locator("[data-testid=stVegaLiteChart] svg.marks")).to_be_visible()
+    assert fake.generate_requests == []
+    assert database.history_count(live_app.db_path) == history
+    expect(page.locator("[data-testid=stMainMenuPopover]")).to_have_count(0)
+
+
+def test_theme_choice_is_remembered_after_reload_navigation_and_new_tab(browser, live_app, fake):
+    page = _open(browser, live_app.url, color_scheme="light")
+    track_not_found(page)
+    try:
+        theme_switch(page).click()
+        expect_theme(page, "dark")
+        page.reload()
+        expect(page.get_by_text(DASHBOARD_HEADING)).to_be_visible()
+        expect_theme(page, "dark")
+        for name in ("AI Analyst", "Query History", "Settings & About"):
+            go(page, name)
+            expect_theme(page, "dark")
+
+        # A new tab straight on another page starts dark: never a light frame first.
+        tab = page.context.new_page()
+        tab.console_errors = []
+        tab.on("console", lambda msg: msg.type == "error" and tab.console_errors.append(msg.text))
+        track_not_found(tab)
+        seen = set()
+        tab.goto(f"{live_app.url}/explorer")
+        for _ in range(25):
+            seen.add(current_theme(tab))
+            tab.wait_for_timeout(100)
+        expect(tab.get_by_text(PAGE_HEADINGS["SQL Explorer"])).to_be_visible()
+        expect_theme(tab, "dark")
+        assert _rgb("#EFECE3") not in seen, seen
+
+        theme_switch(tab).click()
+        expect_theme(tab, "light")
+        page.reload()  # the first tab, still on Settings, now loads light
+        expect(page.get_by_text(PAGE_HEADINGS["Settings & About"])).to_be_visible()
+        expect_theme(page, "light")
+        assert unexpected_errors(page) == [] and unexpected_errors(tab) == []
+    finally:
+        page.context.close()
+
+
+THEMED_PAGES = ["Dashboard", "AI Analyst", "Dashboard Studio", "Import Data", "Connections", "Datasets",
+                "Query History", "SQL Explorer", "Settings & About"]
+
+
+def close_sidebar(page) -> None:
+    """On small screens the open sidebar covers the page: close it (if open)."""
+    content = page.get_by_test_id("stSidebarContent")
+    page.wait_for_timeout(400)  # let the sidebar finish sliding
+    if content.evaluate("e => e.getBoundingClientRect().right > 8"):
+        content.hover()  # Streamlit shows the close button only while the pointer is over the sidebar
+        page.get_by_test_id("stSidebarCollapseButton").locator("button").click()
+        expect(content).not_to_be_in_viewport()
+
+
+PAGE_PATHS = {"Dashboard": "", "AI Analyst": "analyst", "Dashboard Studio": "studio", "Import Data": "import",
+              "Connections": "connections", "Datasets": "datasets", "Query History": "history",
+              "SQL Explorer": "explorer", "Settings & About": "settings"}
+
+
+@pytest.mark.parametrize("width, height", [(1280, 900), (768, 1024), (375, 812)])
+def test_every_page_in_dark_mode_fits_without_errors(browser, live_app, fake, width, height):
+    """Every page in the dark theme at desktop, tablet and phone width: drawn in dark, no sideways
+    scrolling, no console errors (light is covered by the rest of this file). On desktop the pages
+    are opened with the sidebar; on smaller screens by their address, which also shows the choice
+    is kept when a page is opened directly."""
+    page = _open(browser, live_app.url, width=width, height=height)
+    track_not_found(page)
+    try:
+        if width < 800:  # the sidebar starts closed on small screens
+            page.get_by_test_id("stExpandSidebarButton").click()
+        theme_switch(page).click()
+        expect_theme(page, "dark")
+        for name, path in PAGE_PATHS.items():
+            if width < 800:
+                page.goto(f"{live_app.url}/{path}")
+                expect(page.get_by_text(PAGE_HEADINGS[name])).to_be_visible()
+                expect(page.locator("html")).to_have_attribute("data-isql-theme", "dark")
+                expect(page.locator(".stApp")).to_have_css("background-color", _rgb("#0F1520"))
+                close_sidebar(page)
+            else:
+                go(page, name)
+                expect_theme(page, "dark")
+            assert not has_horizontal_overflow(page), name
+            screenshot(page, f"dark-{width}-{path or 'dashboard'}")
+        assert unexpected_errors(page) == []
+    finally:
+        page.context.close()
