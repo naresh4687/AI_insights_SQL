@@ -1,11 +1,11 @@
-# InsightSQL with Docker Compose. Step-by-step guide: DEPLOYMENT.md
+# InsightSQL with Docker Compose. Step-by-step guide: README.md, section 13
 #
 #   docker compose up -d --build     start (or update) everything
 #   docker compose ps                status
 #   docker compose logs -f app       app messages
 #
 # Settings come from .env (copy .env.example). Data lives in the "data" volume; daily backups
-# go to ./backups. With sign-in on, add compose.signin.yaml (see DEPLOYMENT.md).
+# go to ./backups. With sign-in on, add compose.signin.yaml (see README.md, section 13).
 name: insightsql
 
 x-insightsql: &insightsql

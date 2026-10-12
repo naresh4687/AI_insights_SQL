@@ -5,7 +5,7 @@
     python scripts/backup.py restore 20261012-020000 [--dir backups] --yes
 
 Backups are safe while the app is running. Restoring replaces the current data: stop the app
-and the refresh worker first. In Docker, see DEPLOYMENT.md for the matching commands.
+and the refresh worker first. In Docker, see README.md, section 14, for the matching commands.
 Exit code: 0 on success, 1 on failure (the reason is printed).
 """
 

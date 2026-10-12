@@ -1,4 +1,4 @@
-# InsightSQL: the Streamlit app and (with another command) the refresh worker. See DEPLOYMENT.md.
+# InsightSQL: the Streamlit app and (with another command) the refresh worker. See README.md, section 13.
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

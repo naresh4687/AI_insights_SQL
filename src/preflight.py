@@ -84,7 +84,7 @@ def main() -> int:
     for message in errors:
         print(f"ERROR: {message}", flush=True)
     if errors:
-        print("InsightSQL did not start. Fix the settings above (see DEPLOYMENT.md).", flush=True)
+        print("InsightSQL did not start. Fix the settings above (see README.md, section 13).", flush=True)
         return 1
     # A new install is complete from the start (not only after the first visit): the worker and
     # the first backup find the demo database. An existing one only gains missing tables.
