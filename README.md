@@ -84,6 +84,38 @@ SQL parsing with **sqlglot**.
 
 Tested with Python 3.12 on Linux.
 
+**Easiest way, for anyone (no commands to type)**
+
+1. Download the project: on GitHub press the green **Code** button → **Download ZIP**, and unzip it.
+2. Double-click the setup file for your computer:
+
+   | Computer | File | Notes |
+   |----------|------|-------|
+   | Windows | `setup_windows.bat` | If Windows warns "Windows protected your PC", choose **More info → Run anyway** |
+   | Mac | `setup_mac.command` | If macOS blocks it, right-click it → **Open** → **Open**. If it says "permission denied", open Terminal in the folder and run `bash setup_mac_linux.sh` |
+   | Linux | `setup_mac_linux.sh` | Run `bash setup_mac_linux.sh` in a terminal (or right-click → *Run as a Program*) |
+
+3. It installs Python 3.12 if it is missing (winget on Windows, Homebrew on Mac, apt or dnf on
+   Linux; your password may be asked), installs everything else, and asks **"Start InsightSQL
+   now?"** — answer Enter and the app opens in the browser. Stop it with `Ctrl+C` in that window.
+
+To start the app again later, double-click the same file: finished steps are skipped and it goes
+straight to "Start InsightSQL now?". If port 8501 is already in use (the app is already running),
+it uses the next free port and says which.
+
+**Quickest way with a terminal — the guided setup.** After step 1, run one command and it does steps 2–4 for you
+(and creates the sample database), asking only whether to add a Gemini key:
+
+```bash
+python3 setup_app.py          # Windows: py setup_app.py
+python3 setup_app.py --yes    # no questions (Demo Mode)
+python3 setup_app.py --dev    # also install the test tools and test browser
+python3 setup_app.py --start  # start the app at the end without asking
+```
+
+It never overwrites an existing `.env`, and running it again is safe. Then go to step 4.
+The manual steps below do the same by hand.
+
 **Step 1 — Get the code**
 
 ```bash
@@ -787,6 +819,8 @@ scripts/
   refresh_worker.py     Scheduled refreshes (and, with --backup-at, the daily backup)
   backup.py             Backup / list / restore from the command line
   preflight.py          Check the settings before starting
+setup_app.py            Guided setup (virtual environment, packages, .env, sample database)
+setup_windows.bat, setup_mac.command, setup_mac_linux.sh   Double-click launchers (install Python if needed)
 Dockerfile, .dockerignore, compose.yaml, compose.signin.yaml, deploy/Caddyfile   Deployment
 requirements.txt        Runtime dependencies; requirements-dev.txt adds the test tools
 tests/                  Unit, integration, app (AppTest), browser (Playwright) and Docker tests
